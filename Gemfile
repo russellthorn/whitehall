@@ -48,6 +48,7 @@ gem 'parallel', '1.4.1'
 gem 'responders', '~> 2.0'
 gem 'ruby-progressbar', require: false
 gem 'equivalent-xml', '0.5.1', require: false
+gem 'rack-utf8_sanitizer'
 
 gem 'deprecated_columns', '0.1.0'
 
