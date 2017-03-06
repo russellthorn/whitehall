@@ -638,13 +638,8 @@ class Edition < ActiveRecord::Base
     )
   end
 
-  def has_associated_needs?
-    need_ids.try(:any?)
-  end
-
   def associated_needs
-    return [] unless has_associated_needs?
-
+    return [] unless need_ids.try(:any?)
     response = Whitehall.publishing_api_v2_client.get_expanded_links(
       document.content_id
     )
