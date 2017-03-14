@@ -69,12 +69,16 @@ module SyncChecker
 
       def draft_linked_document_content_ids(edition)
         edition.documents
-          .select { |document| document_is_deleted?(document) }
+          .reject { |document| document_is_deleted?(document) }
           .map(&:content_id)
       end
 
       def document_is_deleted?(document)
-        document.editions.any?
+        Edition
+          .unscoped
+          .where(document_id: document.id)
+          .pluck(:state)
+          .last == "deleted"
       end
 
       def latest_edition_published?(document)
