@@ -36,6 +36,7 @@ module PublishingApi
         .extract(
           %i(
             organisations
+            parent
           )
         )
         .merge(CorporateInformationPages.for(corporate_information_page))
