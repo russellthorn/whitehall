@@ -69,12 +69,12 @@ module SyncChecker
 
       def draft_linked_document_content_ids(edition)
         edition.documents
-          .reject { |document| document_is_deleted?(document) }
+          .select { |document| document_has_a_visible_edition?(document) }
           .map(&:content_id)
       end
 
-      def document_is_deleted?(document)
-        document.slug =~ /^deleted-/
+      def document_has_a_visible_edition?(document)
+        !!(document.published_edition || document.pre_publication_edition)
       end
 
       def latest_edition_published?(document)
