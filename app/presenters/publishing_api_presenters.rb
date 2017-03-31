@@ -42,6 +42,20 @@ private
       PublishingApi::ContactPresenter
     when OperationalField
       PublishingApi::OperationalFieldPresenter
+    when
+        ::AmbassadorRole,
+        ::BoardMemberRole,
+        ::ChiefProfessionalOfficerRole,
+        ::ChiefScientificAdvisorRole,
+        ::DeputyHeadOfMissionRole,
+        ::GovernorRole,
+        ::HighCommissionerRole,
+        ::JudgeRole,
+        ::MilitaryRole
+        ::SpecialRepresentativeRole
+        ::TrafficCommissionerRole
+        ::WorldwideOfficeStaffRole
+          PublishingApi::RolePresenter
     else
       raise UndefinedPresenterError, "Could not find presenter class for: #{model.inspect}"
     end
