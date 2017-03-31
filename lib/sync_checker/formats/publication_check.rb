@@ -2,19 +2,13 @@ module SyncChecker
   module Formats
     class PublicationCheck < EditionBase
       def checks_for_draft(locale)
-        super + [
-          Checks::LinksCheck.new(
-            "document_collections",
-            edition_expected_in_draft
-              .document_collections
-              .map(&:content_id)
-          ),
+        draft_checks = [
           Checks::LinksCheck.new(
             "ministers",
             edition_expected_in_draft
-              .role_appointments
-              .joins(:person)
-              .pluck("people.content_id")
+            .role_appointments
+            .joins(:person)
+            .pluck("people.content_id")
           ),
           Checks::LinksCheck.new(
             "related_statistical_data_sets",
@@ -23,9 +17,9 @@ module SyncChecker
           Checks::LinksCheck.new(
             "topical_events",
             ::TopicalEvent
-              .joins(:classification_memberships)
-              .where(classification_memberships: { edition_id: edition_expected_in_draft.id })
-              .pluck(:content_id)
+            .joins(:classification_memberships)
+            .where(classification_memberships: { edition_id: edition_expected_in_draft.id })
+            .pluck(:content_id)
           ),
           Checks::LinksCheck.new(
             "children",
@@ -37,6 +31,17 @@ module SyncChecker
             )
           )
         ]
+
+        unless edition_expected_in_draft.withdrawn?
+          draft_checks << Checks::LinksCheck.new(
+            "document_collections",
+            edition_expected_in_draft
+            .document_collections
+            .map(&:content_id)
+          )
+        end
+
+        super + draft_checks
       end
 
       def checks_for_live(locale)
