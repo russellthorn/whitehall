@@ -1,6 +1,5 @@
 class MinisterialRole < Role
   include Searchable
-  include PublishesToPublishingApi
 
   has_many :editions, -> { uniq }, through: :role_appointments
   has_many :consultations, -> { where("editions.type" => Consultation).uniq }, through: :role_appointments
