@@ -117,7 +117,7 @@ GEM
       rails (>= 4.0)
     diff-lcs (1.2.5)
     docile (1.1.5)
-    domain_name (0.5.20170223)
+    domain_name (0.5.20170404)
       unf (>= 0.0.5, < 1.0.0)
     dotenv (2.1.2)
     dotenv-rails (2.1.2)
@@ -136,7 +136,7 @@ GEM
     ffi (1.9.14)
     friendly_id (5.0.4)
       activerecord (>= 4.0.0)
-    gds-api-adapters (41.2.0)
+    gds-api-adapters (41.3.0)
       link_header
       lrucache (~> 0.1.1)
       null_logger
@@ -435,7 +435,7 @@ GEM
       json (>= 1.8.0)
     unf (0.1.4)
       unf_ext
-    unf_ext (0.0.7.2)
+    unf_ext (0.0.7.3)
     unicorn (5.0.0)
       kgio (~> 2.6)
       rack
@@ -478,7 +478,7 @@ DEPENDENCIES
   equivalent-xml (= 0.5.1)
   factory_girl
   friendly_id (= 5.0.4)
-  gds-api-adapters (~> 41.2.0)
+  gds-api-adapters (~> 41.3.0)
   gds-sso (~> 11.0)
   globalize (~> 5.0.0)
   govspeak (~> 3.6.2)
