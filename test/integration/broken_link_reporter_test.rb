@@ -1,6 +1,8 @@
 require 'test_helper'
+require 'gds_api/test_helpers/link_checker_api'
 
 class BrokenLinkReporterTest < ActiveSupport::TestCase
+  include GdsApi::TestHelpers::LinkCheckerApi
 
   teardown do
     if File.directory?(reports_dir)
@@ -8,11 +10,35 @@ class BrokenLinkReporterTest < ActiveSupport::TestCase
     end
   end
 
+  def stub_link_checker_api_request(id, paths)
+    uris = paths.map { |p| "https://www.gov.uk#{p}" }
+    uri_collection = uris.map do |uri|
+      { uri: uri, status: (uri[/good/] ? 'ok' : 'broken') }
+    end
+
+    body = link_checker_api_batch_report_hash(
+      id: id,
+      status: "completed",
+      links: uri_collection
+    )
+
+    stub_request(:post, "#{Plek.find('link-checker-api')}/batch")
+      .with(body: hash_including(uris: uris))
+      .to_return(
+        body: body.to_json,
+        status: 202,
+        headers: { "Content-Type": "application/json" },
+      )
+
+    stub_request(:get, "#{Plek.find('link-checker-api')}/batch/#{id}")
+      .to_return(
+        body: body.to_json,
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      )
+  end
+
   test 'generates CSV reports detailing broken links on public documents grouped by lead organisation' do
-    stub_request(:any, 'https://www.gov.uk/good-link').to_return(status: 200)
-    stub_request(:any, 'https://www.gov.uk/another-good-link').to_return(status: 200)
-    stub_request(:any, 'https://www.gov.uk/bad-link').to_return(status: 500)
-    stub_request(:any, 'https://www.gov.uk/missing-link').to_return(status: 404)
 
     hmrc = create(:organisation, name: 'HM Revenue & Customs')
     embassy_paris = create(:worldwide_organisation, name: 'British Embassy Paris')
@@ -20,18 +46,23 @@ class BrokenLinkReporterTest < ActiveSupport::TestCase
     publication    = create(:published_publication,
                             lead_organisations: [hmrc],
                             body: "[A broken page](https://www.gov.uk/bad-link)\n[A good link](https://www.gov.uk/another-good-link)")
+    stub_link_checker_api_request(1, %w[/bad-link /another-good-link])
 
     news_article   = create(:world_location_news_article,
                             :withdrawn,
                             worldwide_organisations: [embassy_paris],
                             body: "[Good link](https://www.gov.uk/good-link)\n[Missing page](https://www.gov.uk/missing-link)")
+    stub_link_checker_api_request(2, %w[/good-link /missing-link])
 
     detailed_guide = create(:published_detailed_guide,
                             lead_organisations: [hmrc],
                             body: "[Good](https://www.gov.uk/good-link)\n[broken link](https://www.gov.uk/bad-link)\n[Missing page](https://www.gov.uk/missing-link)")
+    stub_link_checker_api_request(3, %w[/good-link /bad-link /missing-link])
+
     draft_document = create(:draft_publication,
                             lead_organisations: [hmrc],
                             body: "[Missing page](https://www.gov.uk/missing-link)")
+    stub_link_checker_api_request(4, %w[/missing-link])
 
     Dir.mkdir(reports_dir) unless File.directory?(reports_dir)
     Whitehall::BrokenLinkReporter.new(reports_dir.to_s, NullLogger.instance).generate_reports
@@ -65,14 +96,13 @@ class BrokenLinkReporterTest < ActiveSupport::TestCase
 
 
   test 'does not blow up if a document does not have any organisations' do
-    stub_request(:any, 'https://www.gov.uk/good-link').to_return(status: 200)
-    stub_request(:any, 'https://www.gov.uk/missing-link').to_return(status: 404)
-
     speech = create(:published_speech,
                     person_override: "The Queen",
                     body: "[Good link](https://www.gov.uk/good-link)\n[Missing page](https://www.gov.uk/missing-link)",
                     role_appointment: nil,
                     create_default_organisation: false)
+
+    stub_link_checker_api_request(2, %w[/good-link /missing-link])
 
     Dir.mkdir(reports_dir) unless File.directory?(reports_dir)
     Whitehall::BrokenLinkReporter.new(reports_dir.to_s, NullLogger.instance).generate_reports

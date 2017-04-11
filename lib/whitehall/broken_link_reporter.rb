@@ -1,3 +1,5 @@
+require 'gds_api/link_checker_api'
+
 # Generates CSV reports of all public documents containing broken links.
 module Whitehall
   class BrokenLinkReporter
@@ -10,15 +12,27 @@ module Whitehall
     end
 
     def generate_reports
-      public_editions.find_each do |edition|
+      incomplete_checkers = public_editions.find_each.map do |edition|
         logger.info "Checking #{edition.type} (#{edition.id}) for bad links"
 
         checker = EditionChecker.new(edition)
-        checker.check_links
+        checker.start_check
+        checker
+      end
 
-        if checker.broken_links.any?
-          csv_for_organisation(checker.organisation) << csv_row_for(checker)
+      # @TODO this could continue forever, and it does no rate limiting
+      # so need to either be confident it's going to work or have means to
+      # stop it playing nasty
+      loop do
+        incomplete_checkers = incomplete_checkers.reject do |checker|
+          checker.check_progress
+          if checker.is_complete? && checker.broken_links.any?
+            csv_for_organisation(checker.organisation) << csv_row_for(checker)
+          end
+          checker.is_complete?
         end
+
+        break if incomplete_checkers.count == 0
       end
 
       close_reports
@@ -31,12 +45,14 @@ module Whitehall
     end
 
     def csv_row_for(checker)
-      [checker.public_url,
+      [
+        checker.public_url,
         checker.admin_url,
         checker.timestamp,
         checker.edition_type,
-        checker.broken_links.size,
-        checker.broken_links.join("\r\n")]
+        checker.broken_link_uris.size,
+        checker.broken_link_uris.join("\r\n"),
+      ]
     end
 
     def csv_for_organisation(organisation)
@@ -53,10 +69,30 @@ module Whitehall
     end
 
     class EditionChecker
-      attr_reader :edition, :broken_links
+      attr_reader :edition, :last_report
 
       def initialize(edition)
         @edition = edition
+      end
+
+      def is_complete?
+        return true unless has_links?
+        return false unless last_report
+        last_report.status == :completed
+      end
+
+      def start_check
+        return unless has_links?
+        @last_report = Whitehall.link_checker_api_client.create_batch(links)
+      end
+
+      def check_progress
+        return unless has_links?
+        @last_report = Whitehall.link_checker_api_client.get_batch(batch_id)
+      end
+
+      def batch_id
+        last_report.id
       end
 
       def public_url
@@ -73,7 +109,7 @@ module Whitehall
 
       def organisation
         if edition.respond_to?(:worldwide_organisations)
-          edition.worldwide_organisations.first
+          edition.worldwide_organisations.first || edition.organisations.first
         elsif edition.respond_to?(:lead_organisations)
           edition.lead_organisations.first || edition.organisations.first
         else
@@ -89,13 +125,17 @@ module Whitehall
         @links ||= Govspeak::LinkExtractor.new(edition.body).links
       end
 
-      def check_links
-        if links.any?
-          run_links_report
-          @broken_links = edition.links_reports.last.broken_links
-        else
-          @broken_links = []
-        end
+      def has_links?
+        links.any?
+      end
+
+      def broken_links
+        report_links = last_report ? last_report.links : []
+        report_links.select { |l| l.status == :broken }
+      end
+
+      def broken_link_uris
+        broken_links.map(&:uri)
       end
 
     private
@@ -108,11 +148,6 @@ module Whitehall
 
       def admin_host
         'whitehall-admin.publishing.service.gov.uk'
-      end
-
-      def run_links_report
-        links_report = LinksReport.create!(link_reportable: edition, links: links)
-        LinksReportWorker.new.perform(links_report.id)
       end
     end
 

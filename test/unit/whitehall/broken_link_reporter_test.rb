@@ -1,8 +1,11 @@
 require 'test_helper'
+require 'gds_api/test_helpers/link_checker_api'
 
 class BrokenLinkReporterTest < ActiveSupport::TestCase
 
   class EditionCheckerTest < ActiveSupport::TestCase
+    include GdsApi::TestHelpers::LinkCheckerApi
+
     test '#page_url returns the production public page URL of the document' do
       detailed_guide = create(:detailed_guide)
       checker = Whitehall::BrokenLinkReporter::EditionChecker.new(detailed_guide)
@@ -56,32 +59,90 @@ class BrokenLinkReporterTest < ActiveSupport::TestCase
       assert_equal edition.public_timestamp.to_s, checker.timestamp
     end
 
-    test '#check_links creates and runs a LinksReport for the edition' do
+    test '#start_check checks the links of an edition' do
       detailed_guide = create(:detailed_guide,
                               body: "[good](https://www.gov.uk/good-link)")
-      stub_request(:any, 'https://www.gov.uk/good-link').to_return(status: 200)
 
+      body = link_checker_api_batch_report_hash(
+        id: 1,
+        status: "completed",
+        links: [{ uri: "http://www.gov.uk/good-link", status: "ok" }],
+      )
+      stub_request(:post, "#{Plek.find('link-checker-api')}/batch")
+        .to_return(
+          body: body.to_json,
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        )
       checker = Whitehall::BrokenLinkReporter::EditionChecker.new(detailed_guide)
-      checker.check_links
+      checker.start_check
 
-      assert links_report = detailed_guide.links_reports.last
-      assert links_report.completed?
+      assert checker.is_complete?
+      assert_equal checker.broken_links, []
     end
 
-    test '#broken_links returns any bad links on the link report for the edition' do
+    test '#check_progress gets the current status of the batch report' do
+      detailed_guide = create(:detailed_guide,
+                              body: "[good](https://www.gov.uk/good-link)")
+
+      body = link_checker_api_batch_report_hash(
+        id: 1,
+        status: "in_progress",
+        links: [{ uri: "http://www.gov.uk/good-link", status: "pending" }],
+      )
+      stub_request(:post, "#{Plek.find('link-checker-api')}/batch")
+        .to_return(
+          body: body.to_json,
+          status: 202,
+          headers: { "Content-Type": "application/json" },
+        )
+      checker = Whitehall::BrokenLinkReporter::EditionChecker.new(detailed_guide)
+      checker.start_check
+
+      assert_equal checker.is_complete?, false
+
+      body = link_checker_api_batch_report_hash(
+        id: 1,
+        status: "completed",
+        links: [{ uri: "http://www.gov.uk/good-link", status: "ok" }],
+      )
+      stub_request(:get, "#{Plek.find('link-checker-api')}/batch/1")
+        .to_return(
+          body: body.to_json,
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        )
+
+      checker.check_progress
+
+      assert checker.is_complete?
+    end
+
+    test '#broken_links_uris returns the uris of bad links for the edition' do
       detailed_guide = create(:detailed_guide,
                               body: "[good](https://www.gov.uk/good-link), [bad](https://www.gov.uk/bad-link), [ugly](https://www.gov.uk/missing-link)")
-      stub_request(:any, 'https://www.gov.uk/good-link').to_return(status: 200)
-      stub_request(:any, 'https://www.gov.uk/bad-link').to_return(status: 500)
-      stub_request(:any, 'https://www.gov.uk/missing-link').to_return(status: 404)
 
+      body = link_checker_api_batch_report_hash(
+        id: 1,
+        status: "completed",
+        links: [
+          { uri: "https://www.gov.uk/good-link", status: "ok" },
+          { uri: "https://www.gov.uk/bad-link", status: "broken" },
+          { uri: "https://www.gov.uk/missing-link", status: "caution" },
+      ],
+      )
+      stub_request(:post, "#{Plek.find('link-checker-api')}/batch")
+        .to_return(
+          body: body.to_json,
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        )
       checker = Whitehall::BrokenLinkReporter::EditionChecker.new(detailed_guide)
-      checker.check_links
+      checker.start_check
 
-      expected_broken_links = ['https://www.gov.uk/bad-link',
-                             'https://www.gov.uk/missing-link']
+      expected_broken_links = ['https://www.gov.uk/bad-link',]
 
-      assert_equal expected_broken_links, checker.broken_links
+      assert_equal expected_broken_links, checker.broken_link_uris
     end
   end
 end
