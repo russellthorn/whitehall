@@ -29,7 +29,6 @@ class ImageUploader < WhitehallUploader
   end
 
   def bitmap?(new_file)
-    return if new_file.nil?
     !(new_file.content_type =~ /svg/)
   end
 end
